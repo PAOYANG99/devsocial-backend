@@ -8,6 +8,7 @@ const fs = require('fs');
 const cloudinary = require('cloudinary').v2;
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const multer = require('multer');
+const { use } = require('react');
 const dotenv = require('dotenv').config();
 
 cloudinary.config({
@@ -84,7 +85,13 @@ router.post('/me/avatar',[auth, upload.single('avatar')], async (req, res) => {
         //const filePath = req.file.path.replace(/\\/g, '/'); // /uploads/avatar-1234-1234.jpg
 
         const user = await User.findById(req.user.id);
+
+        if (user.profilePicturePublicId) {
+            await cloudinary.uploader.destroy(user.profilePicturePublicId);
+        }
+
         user.profilePicture = req.file.path;
+        user.profilePicturePublicId = req.file.filename;
         await user.save();
         res.json({ profilePicture: user.profilePicture });
     } catch (err) {
@@ -96,21 +103,15 @@ router.post('/me/avatar',[auth, upload.single('avatar')], async (req, res) => {
 router.delete('/me/avatar', auth, async (req, res) => {
     try {
         const user = await User.findById(req.user.id);
-        if (!user.profilePicture || user.profilePicture === '') {
-            return res.status(400).json({ msg: 'No profile picture found' });
+
+        if (!user.profilePicturePublicId) {
+            return res.status(404).json({ msg: 'No profile picture to delete ' });
         }
 
-        const imagepath = user.profilePicture;
-        user.profilePicture = '';
+        await cloudinary.uploader.destroy(user.profilePicturePublicId);
+        user.profilePicture = undefined;
+        user.profilePicturePublicId = undefined;
         await user.save();
-
-        fs.unlink(imagepath, (err) => {
-            if (err) {
-                console.error('Failed to delete profile picture file', err);
-            } else {
-                console.log(`Successfully deleted ${imagepath}`);
-            }
-        });
         res.json({msg: 'Profile picture removed successfully'});
     } catch (err) {
         console.error(err.message);
